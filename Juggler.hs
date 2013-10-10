@@ -1,125 +1,45 @@
 {-# LANGUAGE OverloadedStrings #-}
-
 module Main where
 
-import Prelude hiding (take)
-import Data.Attoparsec.Text
-import qualified Data.Text as T
-import Data.Text (Text)
-import Data.Attoparsec.Combinator
 import Control.Applicative
-import Data.Char
-import System.Environment
-import System.Process
+import Data.Attoparsec.Text
 import qualified Data.List as L
+import qualified Data.Text.IO as TIO
+import System.Environment
+import System.IO
+import System.Process
+import qualified Data.Set as S
+import Data.Maybe
 
-data Commit = Commit {
-    p_sha :: Text,
-    p_msg :: Text,
-    p_deltas :: [FileDelta]
-    }
+import Juggler.Parse
+import Juggler.Types
 
-data FileDelta = FileDelta {
-    fd_source :: Text,
-    fd_dest :: Text,
-    fd_hunks :: [Hunk]
-    }
+sh command = do
+    putStrLn command
+    (inp, out, err, pid) <- runInteractiveCommand $ command
+    hClose inp
+    TIO.hGetContents out
 
-data Hunk = Hunk {
-    h_sourceStart :: Int,
-    h_sourceEnd :: Int,
-    h_destStart :: Int,
-    h_destEnd :: Int,
-    h_output :: [Text]
-    }
+clusterSets [] = []
+clusterSets (x:xs) =
+    if (length withX) == 0
+        then x:clusterSets withoutX
+        else clusterSets $ (S.unions $ x:withX):withoutX
+    where (withX, withoutX) = L.partition (intersects x) xs
 
-line = do
-    ln <- takeTill isEndOfLine
-    endOfLine
-    return ln
+deltaFiles d = S.fromList [fd_source d, fd_dest d]
+intersects x = (> 0) . S.size . S.intersection x
+onlyFiles fs c = c {c_deltas = filter ((intersects fs) . deltaFiles) $ c_deltas c}
+fillCommit fs c = c {c_deltas = c_deltas c ++ [FileDelta f f [] | f <- S.toList newFiles]}
+    where newFiles = S.difference fs (S.unions $ map deltaFiles $ c_deltas c)
 
-parseCommit = do
-    sha <- "commit " .*> take 40
-    msg <- many line
-    endOfLine
-    deltas <- many parseDiffs
-    return $ Commit sha (T.unlines msg) deltas
-
-parseDiffs = do
-    string "diff --git "
-    source <- "a/" .*> takeTill isSpace
-    dest <- "b/" .*> line
-    line -- index $hash..$hash perms
-    line -- --- source
-    line -- +++ dest
-    hunks <- many parseHunk
-    return $ FileDelta source dest hunks
-
-parseHunk = do
-    string "@@ "
-    sourceStart <- "-" .*> decimal
-    sourceEnd <- "," .*> decimal
-    string " "
-    destStart <- "+" .*> decimal
-    destEnd <- "," .*> decimal
-    string " @@"
-    line
-    skipMany ("-" >> line)
-    output <- many ("+" .*> line)
-    return $ Hunk sourceStart sourceEnd destStart destEnd output
+fileChains commits = [map (fillCommit fileSet . onlyFiles fileSet) commits| fileSet <- renameSets]
+    where
+        deltas = concatMap c_deltas commits
+        allFiles = concatMap (\d -> [fd_source d, fd_dest d]) deltas
+        renameSets = clusterSets $ map deltaFiles deltas
 
 main = do
     args <- getArgs
-    runCommand $ L.intercalate " " ("git log -p -U0 --pretty='format:%H%n%B'":args)
-
-{-
-911b1582e31256d98dd1c1f1f09085423d600554
-    WIP
-
-diff --git a/rakelib/deprecated.rake b/rakelib/deprecated.rake
-index fc7d67e..3de3fc4 100644
---- a/rakelib/deprecated.rake
-+++ b/rakelib/deprecated.rake
-@@ -17,0 +18,11 @@ end
-+def deprecate_to_invoke(task, args, command)
-+    arg_vals = []
-+    task.arg_names.each do |name|
-+        arg_vals << args[name]
-+    end
-+    puts("#{task.name}[#{arg_vals.join(', ')}] has been replaced by 'invoke #{command}'".red)
-+    sleep(5)
-+    sh("invoke #{command}")
-+end
-+
-+
-diff --git a/rakelib/docs.rake b/rakelib/docs.rake
-index 025bee3..7e9a861 100644
---- a/rakelib/docs.rake
-+++ b/rakelib/docs.rake
-@@ -1,2 +0,0 @@
--require 'launchy'
--
-@@ -4 +1,0 @@ require 'launchy'
--desc "Invoke sphinx 'make build' to generate docs."
-@@ -7,17 +4,3 @@ task :builddocs, [:type, :quiet] do |t, args|
--    if args.type == 'dev'
--        path = "docs/developer"
--    elsif args.type == 'author'
--        path = "docs/course_authors"
--    elsif args.type == 'data'
--        path = "docs/data"
--    else
--        path = "docs"
--    end
--
--    Dir.chdir(path) do
--        if args.quiet == 'verbose'
--            sh('make html quiet=false')
--        else
--            sh('make html quiet=true')
--        end
--    end
-+    verbosity = args.quiet == 'verbose' ? ' --verbose' : ''
-+    type = args.type ? " --type #{args.type}" : ''
-+    deprecate_to_invoke(t, args, "docs.builddocs#{type}#{verbosity}")
--}
+    gitLog <- sh $ L.intercalate " " ("git log -p -U0 --pretty='format:%H%n----%n%B%n----%n'":args)
+    putStrLn $ show $ head $ fileChains $ fromJust $ maybeResult $ newlineTerminate $ parse (orderedCommits <* endOfInput) gitLog
