@@ -52,7 +52,7 @@ formatLineGroup lines@(Content (Added _ _):rest) = div ! class_ "add-line" $ map
 
 formatTableEntry :: FileCommit -> Html
 formatTableEntry fc = td $ do
-    div ! class_ "filename" $ pre $ toHtml $ fc_name fc
+    div ! class_ "filename" $ p $ toHtml $ fc_name fc
     div $ mapM_ formatLineGroup $ L.groupBy ((==) `on` lineType) $ fc_contents fc
 
 formatTable :: FileGrid -> Html
@@ -61,7 +61,7 @@ formatTable table = tr $ mapM_ formatTableEntry (reverse table)
 formatTables :: [FileGrid] -> Html
 formatTables tables = table $ do
     thead $ do
-        mapM_ (td . pre . toHtml . T.strip . fc_msg) $ reverse $ L.head tables
+        mapM_ ((td ! class_ "commit_message") . p . toHtml . T.strip . fc_msg) $ reverse $ L.head tables
     mapM_ formatTable tables
 
 lineType (Padding Filler) = 0
@@ -84,11 +84,16 @@ page comments maxGen tables = html $ do
             preEscapedToHtml ("td {vertical-align: top;}" :: String)
             preEscapedToHtml ("tr {margin: 10;}" :: String)
             preEscapedToHtml ("thead {font-weight: bold; background-color: darkgray;}" :: String)
+            preEscapedToHtml ("pre {font-family: consolas, monospace}" :: String)
             preEscapedToHtml ("* {margin: 0;}" :: String)
-            preEscapedToHtml (".insert-line {background-color: lightgray;}" :: String)
+            preEscapedToHtml (".insert-line {background-color: #ddd;}" :: String)
             preEscapedToHtml (".elision {text-align: center;}" :: String)
             preEscapedToHtml (".source-line.original {color: darkgray;}" :: String)
-            preEscapedToHtml (".filename {font-weight: bold; background-color: lightgray;}" :: String)
+            preEscapedToHtml (".filename {" :: String)
+            preEscapedToHtml ("   background-color: #bb8; background-image: linear-gradient(#cc9, #bb8); font-family: Monaco, 'Liberation Mono',Courier,monospace;" :: String)
+            preEscapedToHtml ("   padding:.5em; margin: .5em 0 .25em 0; border: 1px solid #999;border-top-width: 3px;" :: String)
+            preEscapedToHtml ("}" :: String)
+            preEscapedToHtml (".commit_message {background-color: #ff8; padding:.5em;}" :: String)
             sequence_ $ [
                 preEscapedToHtml $ ".add-line .gen-" ++ show gen ++ "{background-color: #" ++ (uncurryRGB toCss $ addColor maxGen gen) ";}"
                 | gen <- [0..maxGen]
