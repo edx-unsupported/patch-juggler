@@ -38,6 +38,8 @@ instance PartialOrd Hunk where
         | otherwise = Nothing
 
 type FileGrid = [[Line]]
-data Line = SourceLn Text
+type Dirty = Bool
+data Line = SourceLn Dirty Text
           | HunkLn Int Text
           | InsertLn
+          | ElisionLn
