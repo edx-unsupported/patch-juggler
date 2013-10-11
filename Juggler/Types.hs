@@ -44,7 +44,19 @@ instance PartialOrd Hunk where
         | (h_gen left) > (h_gen right) && overlap (h_src left) (h_dst right) = Just GT
         | otherwise = Nothing
 
-type FileGrid = [PaddedList PaddingLine Line]
+data FileHunks = FileHunks {
+    fh_name :: Text,
+    fh_msg :: Text,
+    fh_contents :: [Hunk]
+}
+
+data FileCommit = FileCommit {
+    fc_name :: Text, -- File Name
+    fc_msg :: Text, -- Commit Message
+    fc_contents :: PaddedList PaddingLine Line
+}
+
+type FileGrid = [FileCommit]
 type Dirty = Bool
 data Line = Original Text
           | Dirty Text

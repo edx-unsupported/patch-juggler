@@ -50,14 +50,19 @@ formatLineGroup lines@(Content (Dirty _):rest) = div ! class_ "source-line dirty
 formatLineGroup lines@(Content (Original _):rest) = div ! class_ "source-line original" $ mapM_ formatLine $ elideLines lines
 formatLineGroup lines@(Content (Added _ _):rest) = div ! class_ "add-line" $ mapM_ formatLine lines
 
-formatTableEntry :: PaddedList PaddingLine Line -> Html
-formatTableEntry = td . mapM_ formatLineGroup . L.groupBy ((==) `on` lineType)
+formatTableEntry :: FileCommit -> Html
+formatTableEntry fc = td $ do
+    div ! class_ "filename" $ pre $ toHtml $ fc_name fc
+    div $ mapM_ formatLineGroup $ L.groupBy ((==) `on` lineType) $ fc_contents fc
 
 formatTable :: FileGrid -> Html
 formatTable table = tr $ mapM_ formatTableEntry (reverse table)
 
 formatTables :: [FileGrid] -> Html
-formatTables = table . mapM_ formatTable
+formatTables tables = table $ do
+    thead $ do
+        mapM_ (td . pre . toHtml . T.strip . fc_msg) $ reverse $ L.head tables
+    mapM_ formatTable tables
 
 lineType (Padding Filler) = 0
 lineType (Content (Dirty _)) = 1
@@ -77,10 +82,13 @@ page comments maxGen tables = html $ do
     head $ do
         style $ do
             preEscapedToHtml ("td {vertical-align: top;}" :: String)
+            preEscapedToHtml ("tr {margin: 10;}" :: String)
+            preEscapedToHtml ("thead {font-weight: bold; background-color: darkgray;}" :: String)
             preEscapedToHtml ("* {margin: 0;}" :: String)
             preEscapedToHtml (".insert-line {background-color: lightgray;}" :: String)
             preEscapedToHtml (".elision {text-align: center;}" :: String)
             preEscapedToHtml (".source-line.original {color: darkgray;}" :: String)
+            preEscapedToHtml (".filename {font-weight: bold; background-color: lightgray;}" :: String)
             sequence_ $ [
                 preEscapedToHtml $ ".add-line .gen-" ++ show gen ++ "{background-color: #" ++ (uncurryRGB toCss $ addColor maxGen gen) ";}"
                 | gen <- [0..maxGen]
