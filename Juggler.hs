@@ -20,6 +20,9 @@ import Debug.Trace
 import Data.Monoid
 import Numeric
 import Data.Function
+import Data.Colour.RGBSpace
+import Data.Colour.RGBSpace.HSV
+import Data.Ratio
 
 import Juggler.PaddedList
 import Juggler.Parse
@@ -112,10 +115,10 @@ elideLines lines = lines'
 
 formatLineGroup :: PaddedList PaddingLine Line -> H.Html
 formatLineGroup lines@(Padding Filler:rest) = H.div ! HA.class_ "insert-line" $ mapM_ formatLine lines
-formatLineGroup lines@(Padding (Deleted _):rest) = H.div ! HA.class_ "hunk-line" $ mapM_ formatLine lines
+formatLineGroup lines@(Padding (Deleted _):rest) = H.div ! HA.class_ "del-line" $ mapM_ formatLine lines
 formatLineGroup lines@(Content (Dirty _):rest) = H.div ! HA.class_ "source-line dirty" $ mapM_ formatLine lines
 formatLineGroup lines@(Content (Original _):rest) = H.div ! HA.class_ "source-line original" $ mapM_ formatLine $ elideLines lines
-formatLineGroup lines@(Content (Added _ _):rest) = H.div ! HA.class_ "hunk-line" $ mapM_ formatLine lines
+formatLineGroup lines@(Content (Added _ _):rest) = H.div ! HA.class_ "add-line" $ mapM_ formatLine lines
 
 formatTableEntry :: PaddedList PaddingLine Line -> H.Html
 formatTableEntry = H.td . mapM_ formatLineGroup . L.groupBy ((==) `on` lineType)
@@ -132,20 +135,32 @@ lineType (Content (Original _)) = 2
 lineType (Content (Added _ _)) = 3
 lineType (Padding (Deleted _)) = 4
 
+addColor max gen = hsv 112 0.2 (0.4 + (gen % max) * 0.5)
+delColor max gen = hsv 0 0.5 (0.25 + (gen % max) * 0.7)
+
+toCss r g b = (hex r) . (hex g) . (hex b)
+    where hex = showHex . round . (256 *)
+
 main = do
     args <- getArgs
     gitLog <- sh $ L.intercalate " " ("git log --reverse -p -U0 --pretty='format:%H%n----%n%B%n----%n'":args)
-    let chains = fileChains $ fromJust $ maybeResult $ newlineTerminate $ parse (orderedCommits <* endOfInput) gitLog
+    let commits = fromJust $ maybeResult $ newlineTerminate $ parse (orderedCommits <* endOfInput) gitLog
+        chains = fileChains $ commits
+        maxGen = length commits
     tables <- mapM fillTable' chains
     let
         styles = [
             "td {vertical-align: top;}",
             "* {margin: 0;}",
             ".insert-line {background-color: lightgray;}",
-            ".elision {text-align: center;}"
+            ".elision {text-align: center;}",
+            ".source-line.original {color: darkgray;}"
             ] ++ [
-            ".hunk-line .gen-" ++ show gen ++ "{background-color: #f" ++ showHex gen "f;}"
-            | gen <- [0..15]
+            ".add-line .gen-" ++ show gen ++ "{background-color: #" ++ (uncurryRGB toCss $ addColor maxGen gen) ";}"
+            | gen <- [0..maxGen]
+            ] ++ [
+            ".del-line .gen-" ++ show gen ++ "{background-color: #" ++ (uncurryRGB toCss $ delColor maxGen gen) ";}"
+            | gen <- [0..maxGen]
             ]
     putStr $ "<style>" ++ unlines styles ++ "</style>"
     putStr "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>"
