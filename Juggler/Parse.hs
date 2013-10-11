@@ -48,7 +48,11 @@ fileDelta = do
 range = do
     start <- decimal
     length <- option 1 ("," .*> decimal)
-    return $ Range start length
+    -- For a zero length range, git diff lists the range as starting at the line before
+    -- but we want to always talk about the line after
+    if length == 0
+        then return $ Range start length
+        else return $ Range (start - 1) length
 
 hunk = do
     string "@@ "

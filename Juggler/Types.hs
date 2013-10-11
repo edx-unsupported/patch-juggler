@@ -1,7 +1,14 @@
+{-# LANGUAGE DeriveFunctor #-}
 module Juggler.Types where
 
 import Data.Text (Text)
 import Data.Number.PartialOrd
+
+data Padded a = Padding | Content a
+    deriving (Functor, Show)
+
+type PaddedList a = [Padded a]
+pad = map Content
 
 data Range = Range {
     r_start :: Int,
@@ -37,9 +44,8 @@ instance PartialOrd Hunk where
         | (h_gen left) > (h_gen right) && overlap (h_src left) (h_dst right) = Just GT
         | otherwise = Nothing
 
-type FileGrid = [[Line]]
+type FileGrid = [PaddedList Line]
 type Dirty = Bool
 data Line = SourceLn Dirty Text
           | HunkLn Int Text
-          | InsertLn
           | ElisionLn
