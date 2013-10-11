@@ -81,13 +81,13 @@ comment txt = I.Content $ PreEscaped $ String $ "<!--" ++ txt ++ "-->"
 page comments maxGen tables = html $ do
     head $ do
         style $ do
-            preEscapedToHtml ("td {vertical-align: top;}" :: String)
+            preEscapedToHtml ("* {margin: 0;}" :: String)
+            preEscapedToHtml ("td {vertical-align: top; font-size: 85%;}" :: String)
             preEscapedToHtml ("tr {margin: 10;}" :: String)
             preEscapedToHtml ("thead {font-weight: bold; background-color: darkgray;}" :: String)
             preEscapedToHtml ("pre {font-family: consolas, monospace}" :: String)
-            preEscapedToHtml ("* {margin: 0;}" :: String)
             preEscapedToHtml (".insert-line {background-color: #ddd;}" :: String)
-            preEscapedToHtml (".elision {text-align: center;}" :: String)
+            preEscapedToHtml (".elision {text-align: center; line-height: 0; border-top: 1px dotted #ddd; margin: .5em;}" :: String)
             preEscapedToHtml (".source-line.original {color: darkgray;}" :: String)
             preEscapedToHtml (".filename {" :: String)
             preEscapedToHtml ("   background-color: #bb8; background-image: linear-gradient(#cc9, #bb8); font-family: Monaco, 'Liberation Mono',Courier,monospace;" :: String)
