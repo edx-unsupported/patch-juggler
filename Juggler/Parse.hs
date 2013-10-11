@@ -37,24 +37,28 @@ fileDelta = do
     source <- ("a/" .*> takeTill isSpace) <?> "file delta source"
     space
     dest <- ("b/" .*> line) <?> "file delta dest"
-    option "" (string "new file mode" >> line) <?> "file delta new file"
+    option "" ((string "new" <|> string "deleted") >> string " file mode" >> line) <?> "file delta new file"
     option "" (string "index" >> line) <?> "file delta index" -- index $hash..$hash perms
     option "" (string "---" >> line) <?> "file delta source header" -- --- source
     option "" (string "+++" >> line) <?> "file delta dest header" -- +++ dest
     hunks <- option [] (many1 hunk) <?> "file delta hunks"
+    option "" $ string "\\ No newline at end of file" >> line
     return $ FileDelta source dest hunks
+
+range = do
+    start <- decimal
+    length <- option 1 ("," .*> decimal)
+    return $ Range start length
 
 hunk = do
     string "@@ "
-    sourceStart <- "-" .*> decimal
-    sourceEnd <- option sourceStart ("," .*> decimal)
+    source <- "-" .*> range
     string " "
-    destStart <- "+" .*> decimal
-    destEnd <- option destStart ("," .*> decimal)
+    dest <- "+" .*> range
     string " @@"
     line
     skipMany ("-" >> line)
     output <- option [] $ many1 ("+" .*> line)
-    return $ Hunk (sourceStart, sourceEnd) (destStart, destEnd) output 0
+    return $ Hunk source dest output 0
 
 newlineTerminate = flip feed "" . flip feed "\n"
