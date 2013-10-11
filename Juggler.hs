@@ -55,29 +55,30 @@ traceVal x = traceShow x x
 -- Apply hunk to the topmost file in the filetable
 applyHunk :: FileGrid -> Hunk -> FileGrid
 applyHunk (tip:rest) hunk
-    | srcSize > dstSize = (insertContentPadding (r_end $ h_dst hunk) padding $ replaceContentRange repl contents tip):rest'
-    | otherwise = (replaceContentRange repl contents tip):(map (insertRawPadding (r_end src) padding) rest')
+    | srcSize > dstSize = (insertContent Padding (r_end $ h_dst hunk) (replicate padding $ Deleted (h_gen hunk)) $ replaceContentRange Content repl contents tip):rest'
+    | otherwise = (replaceContentRange Content repl contents tip):(map (insertRaw (contentToRaw tip $ r_end repl) (replicate padding $ Padding Filler)) rest')
     where
-        rest' = map (mapRawRange src (fmap makeDirty)) rest
+        rest' = map (mapRawRange (src {r_start = contentToRaw (head rest) $ r_start src}) (fmap markDirty)) rest
         rangeSize = uncurry (-) . swap
         src = h_src hunk
         repl = (h_dst hunk) {r_length = r_length src}
         srcSize = r_length $ h_src hunk
         dstSize = r_length $ h_dst hunk
-        contents = map (HunkLn (h_gen hunk)) $ h_output hunk
+        contents = map (Added (h_gen hunk)) $ h_output hunk
         padding = abs $ srcSize - dstSize
 
-makeDirty (SourceLn False t) = SourceLn True t
-makeDirty x = x
+markDirty (Original t) = Dirty t
+markDirty x = x
 
-copyLine (HunkLn gen t) = SourceLn True t
+copyLine (Content (Added gen t)) = Content (Dirty t)
+copyLine (Padding (Deleted gen)) = Padding Filler
 copyLine x = x
 
 -- Add all of the hunks to the file table as a new column
 addHunks :: FileGrid -> [Hunk] -> FileGrid
-addHunks table hunks = L.foldl' applyHunk ((map (fmap copyLine) $ head table):table) hunks
+addHunks table hunks = L.foldl' applyHunk ((map copyLine $ head table):table) hunks
 
-fillTable baseline hunks = L.foldl' addHunks [pad $ map (SourceLn False) $ baseline] hunks
+fillTable baseline hunks = L.foldl' addHunks [pad $ map Original $ baseline] hunks
 
 fillTable' commits = do
     let sha = T.unpack $ c_sha $ head commits
@@ -92,26 +93,31 @@ formatTextLine line = H.pre $ do
     H.toHtml (T.stripEnd line)
     nbsp
 
-formatLine :: Padded Line -> H.Html
-formatLine Padding = H.pre $ nbsp
-formatLine (Content ElisionLn) = H.div ! HA.class_ "elision" $ H.toHtml ("\8942" :: String)
-formatLine (Content (SourceLn _ t)) = formatTextLine t
-formatLine (Content (HunkLn gen t)) = formatTextLine t ! HA.class_ (mappend "gen-" (H.toValue gen))
+emptyLine = H.pre $ nbsp
+
+formatLine :: Padded PaddingLine Line -> H.Html
+formatLine (Padding Filler) = emptyLine
+formatLine (Padding (Deleted gen)) = emptyLine ! HA.class_ (mappend "gen-" (H.toValue gen))
+formatLine (Content Elision) = H.div ! HA.class_ "elision" $ H.toHtml ("\8942" :: String)
+formatLine (Content (Original t)) = formatTextLine t
+formatLine (Content (Dirty t)) = formatTextLine t
+formatLine (Content (Added gen t)) = formatTextLine t ! HA.class_ (mappend "gen-" (H.toValue gen))
 
 elideLines lines = lines'
     where
         len = length lines
         lines' = if len > 3
-            then (L.take 2 lines) ++ [Content ElisionLn] ++ L.drop (len - 2) lines
+            then (L.take 2 lines) ++ [Content Elision] ++ L.drop (len - 2) lines
             else lines
 
-formatLineGroup :: PaddedList Line -> H.Html
-formatLineGroup lines@(Padding:rest) = H.div ! HA.class_ "insert-line" $ mapM_ formatLine lines
-formatLineGroup lines@(Content (SourceLn True _):rest) = H.div ! HA.class_ "source-line" $ mapM_ formatLine lines
-formatLineGroup lines@(Content (SourceLn False _):rest) = H.div ! HA.class_ "source-line" $ mapM_ formatLine $ elideLines lines
-formatLineGroup lines@(Content (HunkLn _ _):rest) = H.div ! HA.class_ "hunk-line" $ mapM_ formatLine lines
+formatLineGroup :: PaddedList PaddingLine Line -> H.Html
+formatLineGroup lines@(Padding Filler:rest) = H.div ! HA.class_ "insert-line" $ mapM_ formatLine lines
+formatLineGroup lines@(Padding (Deleted _):rest) = H.div ! HA.class_ "hunk-line" $ mapM_ formatLine lines
+formatLineGroup lines@(Content (Dirty _):rest) = H.div ! HA.class_ "source-line dirty" $ mapM_ formatLine lines
+formatLineGroup lines@(Content (Original _):rest) = H.div ! HA.class_ "source-line original" $ mapM_ formatLine $ elideLines lines
+formatLineGroup lines@(Content (Added _ _):rest) = H.div ! HA.class_ "hunk-line" $ mapM_ formatLine lines
 
-formatTableEntry :: PaddedList Line -> H.Html
+formatTableEntry :: PaddedList PaddingLine Line -> H.Html
 formatTableEntry = H.td . mapM_ formatLineGroup . L.groupBy ((==) `on` lineType)
 
 formatTable :: FileGrid -> H.Html
@@ -120,10 +126,11 @@ formatTable table = H.tr $ mapM_ formatTableEntry (reverse table)
 formatTables :: [FileGrid] -> H.Html
 formatTables = H.table . mapM_ formatTable
 
-lineType Padding = 0
-lineType (Content (SourceLn True _)) = 1
-lineType (Content (SourceLn False _)) = 2
-lineType (Content (HunkLn _ _)) = 3
+lineType (Padding Filler) = 0
+lineType (Content (Dirty _)) = 1
+lineType (Content (Original _)) = 2
+lineType (Content (Added _ _)) = 3
+lineType (Padding (Deleted _)) = 4
 
 main = do
     args <- getArgs
@@ -132,7 +139,7 @@ main = do
     tables <- mapM fillTable' chains
     let
         styles = [
-            "td {vertial-align: top;}",
+            "td {vertical-align: top;}",
             "* {margin: 0;}",
             ".insert-line {background-color: lightgray;}",
             ".elision {text-align: center;}"
@@ -143,4 +150,5 @@ main = do
     putStr $ "<style>" ++ unlines styles ++ "</style>"
     putStr "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>"
     putStr $ "<!--" ++ show chains ++ "-->"
+    putStr $ "<!--" ++ T.unpack gitLog ++ "-->"
     putStr $ renderHtml $ formatTables tables

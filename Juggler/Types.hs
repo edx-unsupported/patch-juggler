@@ -4,10 +4,10 @@ module Juggler.Types where
 import Data.Text (Text)
 import Data.Number.PartialOrd
 
-data Padded a = Padding | Content a
+data Padded a b = Padding a | Content b
     deriving (Functor, Show)
 
-type PaddedList a = [Padded a]
+type PaddedList a b = [Padded a b]
 pad = map Content
 
 data Range = Range {
@@ -44,8 +44,12 @@ instance PartialOrd Hunk where
         | (h_gen left) > (h_gen right) && overlap (h_src left) (h_dst right) = Just GT
         | otherwise = Nothing
 
-type FileGrid = [PaddedList Line]
+type FileGrid = [PaddedList PaddingLine Line]
 type Dirty = Bool
-data Line = SourceLn Dirty Text
-          | HunkLn Int Text
-          | ElisionLn
+data Line = Original Text
+          | Dirty Text
+          | Added Int Text
+          | Elision
+
+data PaddingLine = Deleted Int
+                 | Filler

@@ -2,32 +2,31 @@ module Juggler.PaddedList where
 
 import Prelude hiding (take, drop, splitAt)
 import qualified Data.List as L
+import Data.Maybe
 
 import Juggler.Types
 
 numbered = snd . L.mapAccumL numbered' 0
-    where numbered' count Padding = (count, (count, Padding))
+    where numbered' count (Padding a) = (count, (count, Padding a))
           numbered' count (Content a) = (count + 1, (count, Content a))
 
 take n xs = map snd $ takeWhile ((< n) . fst) $ numbered xs
 drop n xs = map snd $ dropWhile ((< n) . fst) $ numbered xs
 
-splitAt :: Int -> PaddedList a -> (PaddedList a, PaddedList a)
+splitAt :: Int -> PaddedList a b -> (PaddedList a b, PaddedList a b)
 splitAt n xs = (map snd left, map snd right)
     where (left, right) = break ((>= n) . fst) $ numbered xs
---take 0 _ = []
---take _ [] = []
---take n (Padding:xs) = Padding:take n xs
---take n (Content a:xs) = Content a:take (n-1) xs
 
---drop 0 xs = xs
---drop _ [] = []
---drop n (Padding:xs) = drop n xs
---drop n (Content _:xs) = drop (n-1) xs
+contentToRaw :: PaddedList a b -> Int -> Int
+contentToRaw xs n = fromMaybe (length xs) (L.findIndex ((== n) . fst) $ numbered xs)
 
+replaceRawRange :: Range -> PaddedList a b -> PaddedList a b -> PaddedList a b
 replaceRawRange = replaceRangeWith L.take L.drop
-replaceContentRange range repl = replaceRangeWith take drop range (map Content repl)
 
+replaceContentRange :: (a -> Padded b c) -> Range -> [a] -> PaddedList b c -> PaddedList b c
+replaceContentRange cons range repl = replaceRangeWith take drop range (map cons repl)
+
+replaceRangeWith :: (Int -> [a] -> [a]) -> (Int -> [a] -> [a]) -> Range -> [a] -> [a] -> [a]
 replaceRangeWith take drop range repl xs = before ++ repl ++ after
     where
         before = take (r_start range) xs
@@ -42,12 +41,7 @@ mapRangeWith take drop range fn xs = before ++ map fn toChange ++ after
         toChange = take (r_length range) $ drop (r_start range) xs
         after = drop (r_end range) xs
 
-insertRawPadding = insertPaddingWith L.splitAt
-insertContentPadding = insertPaddingWith splitAt
-
-insertPaddingWith splitAt pos amount xs = before ++ (replicate amount Padding) ++ after
-    where
-        (before, after) = splitAt pos xs
-
 insertRaw pos = replaceRawRange (Range pos 0)
-insertContent pos = replaceContentRange (Range pos 0)
+
+insertContent :: (a -> Padded b c) -> Int -> [a] -> PaddedList b c -> PaddedList b c
+insertContent cons pos = replaceContentRange cons (Range pos 0)
