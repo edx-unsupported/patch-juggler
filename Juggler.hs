@@ -123,7 +123,10 @@ formatTableEntry :: [Line] -> H.Html
 formatTableEntry = H.td . mapM_ formatLineGroup . L.groupBy ((==) `on` lineType)
 
 formatTable :: FileGrid -> H.Html
-formatTable table = H.table $ mapM_ formatTableEntry (reverse table)
+formatTable table = H.tr $ mapM_ formatTableEntry (reverse table)
+
+formatTables :: [FileGrid] -> H.Html
+formatTables = H.table . mapM_ formatTable
 
 lineType InsertLn = 0
 lineType (SourceLn True _) = 1
@@ -148,4 +151,4 @@ main = do
     putStr $ "<style>" ++ unlines styles ++ "</style>"
     putStr "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>"
     --putStr $ "<!--" ++ show chains ++ "-->"
-    putStr $ renderHtml $ mapM_ formatTable tables
+    putStr $ renderHtml $ formatTables tables
