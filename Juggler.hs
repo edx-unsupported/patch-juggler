@@ -92,7 +92,7 @@ addHunks table hunks = L.foldl' applyHunk (tip:table) (fh_contents hunks)
     where tip = FileCommit (fh_name hunks) (fh_msg hunks) (map copyLine $ fc_contents $ head table)
 
 fillTable :: T.Text -> [T.Text] -> [FileHunks] -> FileGrid
-fillTable filename baseline hunks = L.foldl' addHunks [FileCommit filename "Source" $ pad $ map Original $ baseline] hunks
+fillTable filename baseline hunks = L.foldl' addHunks [FileCommit filename "Original" $ pad $ map Original $ baseline] hunks
 
 fillTable' commits = do
     let sha = c_sha $ head commits
@@ -109,4 +109,3 @@ main = do
         maxGen = length commits
     tables <- mapM fillTable' chains
     putStr $ renderHtml $ page [show chains, T.unpack gitLog] maxGen tables
-
