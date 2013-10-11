@@ -12,21 +12,12 @@ import qualified Data.Set as S
 import Data.Maybe
 import Data.Tuple
 import qualified Data.Text as T
-import qualified Text.Blaze.Html5 as H
-import qualified Text.Blaze.Html5.Attributes as HA
-import Text.Blaze.Html5 ((!))
 import Text.Blaze.Html.Renderer.String
-import Debug.Trace
-import Data.Monoid
-import Numeric
-import Data.Function
-import Data.Colour.RGBSpace
-import Data.Colour.RGBSpace.HSV
-import Data.Ratio
 
 import Juggler.PaddedList
 import Juggler.Parse
 import Juggler.Types
+import Juggler.Html
 
 sh command = do
     -- putStrLn command
@@ -52,8 +43,6 @@ fileChains commits = [map (fillCommit fileSet . onlyFiles fileSet) commits | fil
         deltas = concatMap c_deltas commits
         allFiles = concatMap (\d -> [fd_source d, fd_dest d]) deltas
         renameSets = clusterSets $ map deltaFiles deltas
-
-traceVal x = traceShow x x
 
 -- Apply hunk to the topmost file in the filetable
 applyHunk :: FileGrid -> Hunk -> FileGrid
@@ -89,58 +78,6 @@ fillTable' commits = do
     sourceContents <- sh $ "git show " ++ sha ++ "^:" ++ file
     return $ fillTable (T.lines sourceContents) $ map fd_hunks $ concatMap c_deltas commits
 
-nbsp :: H.Html
-nbsp = H.toHtml ("\160" :: String)
-
-formatTextLine line = H.pre $ do
-    H.toHtml (T.stripEnd line)
-    nbsp
-
-emptyLine = H.pre $ nbsp
-
-formatLine :: Padded PaddingLine Line -> H.Html
-formatLine (Padding Filler) = emptyLine
-formatLine (Padding (Deleted gen)) = emptyLine ! HA.class_ (mappend "gen-" (H.toValue gen))
-formatLine (Content Elision) = H.div ! HA.class_ "elision" $ H.toHtml ("\8942" :: String)
-formatLine (Content (Original t)) = formatTextLine t
-formatLine (Content (Dirty t)) = formatTextLine t
-formatLine (Content (Added gen t)) = formatTextLine t ! HA.class_ (mappend "gen-" (H.toValue gen))
-
-elideLines lines = lines'
-    where
-        len = length lines
-        lines' = if len > 3
-            then (L.take 2 lines) ++ [Content Elision] ++ L.drop (len - 2) lines
-            else lines
-
-formatLineGroup :: PaddedList PaddingLine Line -> H.Html
-formatLineGroup lines@(Padding Filler:rest) = H.div ! HA.class_ "insert-line" $ mapM_ formatLine lines
-formatLineGroup lines@(Padding (Deleted _):rest) = H.div ! HA.class_ "del-line" $ mapM_ formatLine lines
-formatLineGroup lines@(Content (Dirty _):rest) = H.div ! HA.class_ "source-line dirty" $ mapM_ formatLine lines
-formatLineGroup lines@(Content (Original _):rest) = H.div ! HA.class_ "source-line original" $ mapM_ formatLine $ elideLines lines
-formatLineGroup lines@(Content (Added _ _):rest) = H.div ! HA.class_ "add-line" $ mapM_ formatLine lines
-
-formatTableEntry :: PaddedList PaddingLine Line -> H.Html
-formatTableEntry = H.td . mapM_ formatLineGroup . L.groupBy ((==) `on` lineType)
-
-formatTable :: FileGrid -> H.Html
-formatTable table = H.tr $ mapM_ formatTableEntry (reverse table)
-
-formatTables :: [FileGrid] -> H.Html
-formatTables = H.table . mapM_ formatTable
-
-lineType (Padding Filler) = 0
-lineType (Content (Dirty _)) = 1
-lineType (Content (Original _)) = 2
-lineType (Content (Added _ _)) = 3
-lineType (Padding (Deleted _)) = 4
-
-addColor max gen = hsv 112 0.2 (0.4 + (gen % max) * 0.5)
-delColor max gen = hsv 0 0.5 (0.25 + (gen % max) * 0.7)
-
-toCss r g b = (hex r) . (hex g) . (hex b)
-    where hex = showHex . round . (256 *)
-
 main = do
     args <- getArgs
     gitLog <- sh $ L.intercalate " " ("git log --reverse -p -U0 --pretty='format:%H%n----%n%B%n----%n'":args)
@@ -148,22 +85,5 @@ main = do
         chains = fileChains $ commits
         maxGen = length commits
     tables <- mapM fillTable' chains
-    let
-        styles = [
-            "td {vertical-align: top;}",
-            "* {margin: 0;}",
-            ".insert-line {background-color: lightgray;}",
-            ".elision {text-align: center;}",
-            ".source-line.original {color: darkgray;}"
-            ] ++ [
-            ".add-line .gen-" ++ show gen ++ "{background-color: #" ++ (uncurryRGB toCss $ addColor maxGen gen) ";}"
-            | gen <- [0..maxGen]
-            ] ++ [
-            ".del-line .gen-" ++ show gen ++ "{background-color: #" ++ (uncurryRGB toCss $ delColor maxGen gen) ";}"
-            | gen <- [0..maxGen]
-            ]
-    putStr $ "<style>" ++ unlines styles ++ "</style>"
-    putStr "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>"
-    putStr $ "<!--" ++ show chains ++ "-->"
-    putStr $ "<!--" ++ T.unpack gitLog ++ "-->"
-    putStr $ renderHtml $ formatTables tables
+    putStr $ renderHtml $ page [show chains, T.unpack gitLog] maxGen tables
+
