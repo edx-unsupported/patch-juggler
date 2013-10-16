@@ -3,6 +3,7 @@
 module Juggler.Parse where
 
 
+import Control.Lens
 import Control.Applicative
 import Data.Attoparsec.Text
 import Data.Char
@@ -16,13 +17,9 @@ line = do
     endOfLine
     return ln
 
-setHunkGeneration gen hunk = hunk {h_gen = gen}
-setDeltaGeneration gen delta = delta {fd_hunks = map (setHunkGeneration gen) $ fd_hunks delta}
-setCommitGeneration gen commit = commit {c_deltas = map (setDeltaGeneration gen) $ c_deltas commit}
-
 orderedCommits = do
     commits <- many commit
-    return $ zipWith (setCommitGeneration) [1..] commits
+    return $ zipWith (set (deltas . mapped . hunks . mapped . gen)) [1..] commits
 
 commit = do
     sha <- line <?> "commit sha"

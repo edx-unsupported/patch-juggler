@@ -19,14 +19,15 @@ executable juggler
   main-is:             Juggler.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       base == 4.5.*
+  build-depends:       base == 4.6.*
                      , attoparsec == 0.10.*
                      , text == 0.11.*
                      , process == 1.1.*
                      , logfloat == 0.12.*
-                     , containers == 0.4.*
+                     , containers == 0.5.*
                      , blaze-html == 0.6.*
                      , colour == 2.3.*
                      , blaze-markup == 0.5.*
+                     , lens == 3.10.*
   -- hs-source-dirs:
   default-language:    Haskell2010

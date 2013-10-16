@@ -1,6 +1,7 @@
 module Juggler.PaddedList where
 
-import Prelude hiding (take, drop, splitAt)
+import Prelude hiding (take, drop, splitAt, length)
+import Control.Lens
 import qualified Data.List as L
 import Data.Maybe
 
@@ -18,7 +19,7 @@ splitAt n xs = (map snd left, map snd right)
     where (left, right) = break ((>= n) . fst) $ numbered xs
 
 contentToRaw :: PaddedList a b -> Int -> Int
-contentToRaw xs n = fromMaybe (length xs) (L.findIndex ((== n) . fst) $ numbered xs)
+contentToRaw xs n = fromMaybe (L.length xs) (L.findIndex ((== n) . fst) $ numbered xs)
 
 replaceRawRange :: Range -> PaddedList a b -> PaddedList a b -> PaddedList a b
 replaceRawRange = replaceRangeWith L.take L.drop
@@ -29,17 +30,18 @@ replaceContentRange cons range repl = replaceRangeWith take drop range (map cons
 replaceRangeWith :: (Int -> [a] -> [a]) -> (Int -> [a] -> [a]) -> Range -> [a] -> [a] -> [a]
 replaceRangeWith take drop range repl xs = before ++ repl ++ after
     where
-        before = take (r_start range) xs
-        after = drop (r_end range) xs
+        before = take (range ^. start) xs
+        after = drop (range ^. end) xs
 
 mapRawRange = mapRangeWith L.take L.drop
 mapContentRange range fn = mapRangeWith take drop range (fmap fn)
 
+mapRangeWith :: (Int -> [a] -> [a]) -> (Int -> [a] -> [a]) -> Range -> (a -> a) -> [a] -> [a]
 mapRangeWith take drop range fn xs = before ++ map fn toChange ++ after
     where
-        before = take (r_start range) xs
-        toChange = take (r_length range) $ drop (r_start range) xs
-        after = drop (r_end range) xs
+        before = take (range ^. start) xs
+        toChange = take (range ^. length) $ drop (range ^. start) xs
+        after = drop (range ^. end) xs
 
 insertRaw pos = replaceRawRange (Range pos 0)
 

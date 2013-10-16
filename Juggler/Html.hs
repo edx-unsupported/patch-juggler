@@ -2,12 +2,13 @@
 
 module Juggler.Html where
 
-import Prelude hiding (head, div)
-import Text.Blaze.Internal hiding (Content)
+import Control.Lens ((^.), view)
+import Prelude hiding (head, div, length)
+import Text.Blaze.Internal hiding (Content, name, contents)
 import qualified Text.Blaze.Internal as I
-import Text.Blaze.Html
-import Text.Blaze.Html5
-import Text.Blaze.Html5.Attributes hiding (style)
+import Text.Blaze.Html hiding (contents, name)
+import Text.Blaze.Html5 hiding (contents)
+import Text.Blaze.Html5.Attributes hiding (style, name)
 import Numeric
 import Data.Colour.RGBSpace
 import Data.Colour.RGBSpace.HSV
@@ -38,7 +39,7 @@ formatLine (Content (Added gen t)) = formatTextLine t ! class_ (mappend "gen-" (
 
 elideLines lines = lines'
     where
-        len = length lines
+        len = L.length lines
         lines' = if len > 3
             then (L.take 2 lines) ++ [Content Elision] ++ L.drop (len - 2) lines
             else lines
@@ -52,8 +53,8 @@ formatLineGroup lines@(Content (Added _ _):rest) = div ! class_ "add-line" $ map
 
 formatTableEntry :: FileCommit -> Html
 formatTableEntry fc = td $ do
-    div ! class_ "filename" $ p $ toHtml $ fc_name fc
-    div $ mapM_ formatLineGroup $ L.groupBy ((==) `on` lineType) $ fc_contents fc
+    div ! class_ "filename" $ p $ toHtml $ fc ^. name
+    div $ mapM_ formatLineGroup $ L.groupBy ((==) `on` lineType) $ fc ^. contents
 
 formatTable :: FileGrid -> Html
 formatTable table = tr $ mapM_ formatTableEntry (reverse table)
@@ -61,7 +62,7 @@ formatTable table = tr $ mapM_ formatTableEntry (reverse table)
 formatTables :: [FileGrid] -> Html
 formatTables tables = table $ do
     thead $ do
-        mapM_ ((td ! class_ "commit_message") . p . toHtml . T.strip . fc_msg) $ reverse $ L.head tables
+        mapM_ ((td ! class_ "commit_message") . p . toHtml . T.strip . (view msg)) $ reverse $ L.head tables
     mapM_ formatTable tables
 
 lineType (Padding Filler) = 0
